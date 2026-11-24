@@ -1,0 +1,200 @@
+// InvoiceFlow — multi-tenant invoicing SaaS schema
+// Every business-facing row is scoped to an Organization (tenant).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Organization {
+  id             String   @id @default(cuid())
+  name           String
+  slug           String   @unique // used in subdomain / URLs
+  plan           Plan     @default(FREE)
+  stripeCustomerId String? @unique
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  members  Member[]
+  customers Customer[]
+  invoices  Invoice[]
+  webhookEvents WebhookEvent[]
+
+  @@map("organizations")
+}
+
+enum Plan {
+  FREE
+  PRO
+  ENTERPRISE
+}
+
+model Member {
+  id             String     @id @default(cuid())
+  organizationId String
+  userId         String
+  role           MemberRole @default(ADMIN)
+  createdAt      DateTime   @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId])
+  @@map("members")
+}
+
+enum MemberRole {
+  OWNER
+  ADMIN
+  VIEWER
+}
+
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  passwordHash  String
+  name          String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  memberships Member[]
+
+  @@map("users")
+}
+
+model Customer {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  email          String
+  // billing details
+  addressLine1   String?
+  addressLine2   String?
+  city           String?
+  postalCode     String?
+  country        String?  // ISO 3166-1 alpha-2
+  taxId          String?
+  stripeCustomerId String? // per-org Stripe customer
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invoices     Invoice[]
+
+  @@unique([organizationId, email]) // same customer email only once per org
+  @@index([organizationId])
+  @@map("customers")
+}
+
+model Invoice {
+  id             String       @id @default(cuid())
+  number         String // human-readable, e.g. INV-2026-0001 (per-org sequence)
+  organizationId String
+  customerId     String
+  status         InvoiceStatus @default(DRAFT)
+  currency       String       @default("usd")
+  issueDate      DateTime     @default(now())
+  dueDate        DateTime
+  notes          String?
+
+  subtotalCents Int
+  taxCents      Int @default(0)
+  totalCents    Int
+
+  // Stripe linkage
+  stripeInvoiceId String? @unique
+  stripePaymentIntentId String?
+  stripeHostedUrl String? // checkout / hosted invoice link
+
+  paidAt   DateTime?
+  voidedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customer     Customer     @relation(fields: [customerId], references: [id])
+  items        InvoiceItem[]
+  payments     Payment[]
+
+  @@unique([organizationId, number])
+  @@index([organizationId, status])
+  @@index([customerId])
+  @@map("invoices")
+}
+
+enum InvoiceStatus {
+  DRAFT
+  OPEN
+  PAID
+  VOID
+  UNCOLLECTIBLE
+}
+
+model InvoiceItem {
+  id          String @id @default(cuid())
+  invoiceId   String
+  description String
+  quantity    Decimal @db.Decimal(12, 2)
+  unitPriceCents Int
+  totalCents  Int // quantity * unitPriceCents
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+  @@map("invoice_items")
+}
+
+model Payment {
+  id          String   @id @default(cuid())
+  invoiceId   String
+  amountCents Int
+  method      PaymentMethod @default(STRIPE)
+  stripeChargeId String?
+  stripeRefundId String? // set when partially/fully refunded
+  refundedCents Int @default(0)
+  createdAt   DateTime @default(now())
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+  @@map("payments")
+}
+
+enum PaymentMethod {
+  STRIPE
+  MANUAL // recorded offline payment by org admin
+}
+
+// Every Stripe webhook we receive, for idempotency + replay + debugging
+model WebhookEvent {
+  id          String   @id // Stripe event id (evt_...)
+  type        String
+  payload     Json
+  processedAt DateTime?
+  error       String?
+  receivedAt  DateTime @default(now())
+
+  organization Organization? @relation(fields: [organizationId], references: [id])
+  organizationId String?
+
+  @@map("webhook_events")
+}
+
+model AuditLog {
+  id             String   @id @default(cuid())
+  organizationId String
+  userId         String?
+  action         String // e.g. "invoice.sent", "payment.refunded"
+  resourceType   String
+  resourceId     String
+  metadata       Json?
+  createdAt      DateTime @default(now())
+
+  @@index([organizationId, createdAt])
+  @@map("audit_logs")
+}
