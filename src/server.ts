@@ -32,7 +32,9 @@ export async function buildApp() {
   });
   await app.register(swaggerUi, { routePrefix: "/docs" });
 
-  await app.register(authPlugin);
+  // Invoked directly (not app.register) so its onRequest hook applies to routes
+  // registered in this same context — Fastify encapsulation would otherwise scope it away.
+  await authPlugin(app);
   app.setErrorHandler(errorHandler);
 
   app.get("/health", async () => ({ status: "ok" }));

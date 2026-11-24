@@ -102,6 +102,7 @@ model Invoice {
   notes          String?
 
   subtotalCents Int
+  taxBps        Int? // tax rate in basis points (1000 = 10%)
   taxCents      Int @default(0)
   totalCents    Int
 
