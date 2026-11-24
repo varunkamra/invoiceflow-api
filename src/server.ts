@@ -17,6 +17,10 @@ export async function buildApp() {
     },
   });
 
+  // Payment webhooks must be verified against the raw, un-parsed body.
+  // The raw-body parser lives in routes/webhooks.ts, scoped to that plugin's
+  // encapsulation context so the rest of the API keeps the default JSON parser.
+
   await app.register(helmet);
   await app.register(cors, { origin: true, credentials: true });
   await app.register(rateLimit, { max: 100, timeWindow: "1 minute" });
@@ -44,8 +48,10 @@ export async function buildApp() {
   return app;
 }
 
-// Only auto-start when run directly (tests import buildApp instead)
-if (process.argv[1] && process.argv[1].endsWith("server.ts")) {
+// Only auto-start when run directly (tests import buildApp instead).
+// Covers both dev (tsx src/server.ts) and production (dist/server.js).
+const entry = process.argv[1] ?? "";
+if (entry.endsWith("server.ts") || entry.endsWith("server.js")) {
   buildApp()
     .then((app) => app.listen({ port: env.PORT, host: "0.0.0.0" }))
     .catch((err) => {

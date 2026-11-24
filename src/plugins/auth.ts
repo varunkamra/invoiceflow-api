@@ -20,7 +20,7 @@ export async function authPlugin(app: FastifyInstance) {
 
   app.addHook("onRequest", async (req: FastifyRequest, reply: FastifyReply) => {
     // Public routes opt out via config.url — keep this simple, add a skip-list later
-    const publicPaths = ["/health", "/docs", "/auth/login", "/auth/register", "/webhooks/stripe"];
+    const publicPaths = ["/health", "/docs", "/auth/login", "/auth/register", "/webhooks/"];
     if (publicPaths.some((p) => req.url.startsWith(p))) return;
 
     const header = req.headers.authorization;

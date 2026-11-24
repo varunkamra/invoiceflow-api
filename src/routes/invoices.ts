@@ -8,6 +8,9 @@ import {
   transitionInvoice,
   updateDraftInvoice,
 } from "../services/invoices.js";
+import { paymentProvider } from "../services/payments/index.js";
+import { paymentsConfigured } from "../config/env.js";
+import { prisma } from "../lib/prisma.js";
 
 const itemSchema = z.object({
   description: z.string().min(1).max(500),
@@ -70,6 +73,35 @@ export async function invoiceRoutes(app: FastifyInstance) {
     requireRole(req, "ADMIN");
     const { id } = z.object({ id: z.string().min(1) }).parse(req.params);
     return transitionInvoice(req.auth!.organizationId, id, "VOID");
+  });
+
+  app.post("/:id/payment-link", async (req, reply) => {
+    requireRole(req, "ADMIN");
+    if (!paymentsConfigured) {
+      return reply.code(503).send({ error: "payments not configured" });
+    }
+    const { id } = z.object({ id: z.string().min(1) }).parse(req.params);
+    const invoice = await getInvoice(req.auth!.organizationId, id);
+    if (invoice.status !== "OPEN") {
+      const err = new Error("payment links can only be created for OPEN invoices") as Error & {
+        statusCode?: number;
+      };
+      err.statusCode = 422;
+      throw err;
+    }
+    const link = await paymentProvider.createPaymentLink({
+      invoiceId: invoice.id,
+      amountMinor: invoice.totalCents,
+      currency: invoice.currency,
+      description: `Invoice ${invoice.number}`,
+      customerName: invoice.customer.name,
+      customerEmail: invoice.customer.email,
+    });
+    await prisma.invoice.update({
+      where: { id: invoice.id },
+      data: { stripePaymentIntentId: link.providerPaymentId, stripeHostedUrl: link.url },
+    });
+    return reply.code(201).send({ url: link.url, providerPaymentId: link.providerPaymentId });
   });
 
   app.post("/:id/mark-uncollectible", async (req) => {
