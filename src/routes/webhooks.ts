@@ -68,14 +68,14 @@ export async function webhookRoutes(app: FastifyInstance) {
               data: {
                 status: "PAID",
                 paidAt: new Date(),
-                stripePaymentIntentId: event.providerPaymentId,
+                providerPaymentId: event.providerPaymentId,
               },
             }),
             prisma.payment.create({
               data: {
                 invoiceId: invoice.id,
                 amountCents: event.amountMinor,
-                method: "STRIPE", // TODO: rename enum to PROVIDER with Razorpay pivot
+                method: "PROVIDER",
               },
             }),
           ]);

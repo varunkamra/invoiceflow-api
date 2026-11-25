@@ -122,7 +122,7 @@ export async function invoiceRoutes(app: FastifyInstance) {
     });
     await prisma.invoice.update({
       where: { id: invoice.id },
-      data: { stripePaymentIntentId: link.providerPaymentId, stripeHostedUrl: link.url },
+      data: { providerPaymentId: link.providerPaymentId, paymentUrl: link.url },
     });
     return reply.code(201).send({ url: link.url, providerPaymentId: link.providerPaymentId });
   });

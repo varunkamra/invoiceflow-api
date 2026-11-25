@@ -15,7 +15,7 @@ model Organization {
   name           String
   slug           String   @unique // used in subdomain / URLs
   plan           Plan     @default(FREE)
-  stripeCustomerId String? @unique
+  providerCustomerId String? @unique
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -78,7 +78,7 @@ model Customer {
   postalCode     String?
   country        String?  // ISO 3166-1 alpha-2
   taxId          String?
-  stripeCustomerId String? // per-org Stripe customer
+  providerCustomerId String? // per-org payment provider customer
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -107,9 +107,9 @@ model Invoice {
   totalCents    Int
 
   // Stripe linkage
-  stripeInvoiceId String? @unique
-  stripePaymentIntentId String?
-  stripeHostedUrl String? // checkout / hosted invoice link
+  providerInvoiceId String? @unique
+  providerPaymentId String?
+  paymentUrl String? // hosted checkout / payment link
 
   sentAt         DateTime? // when invoice was emailed to the customer
   lastReminderAt DateTime? // last overdue reminder sent (throttle reminders)
@@ -157,9 +157,9 @@ model Payment {
   id          String   @id @default(cuid())
   invoiceId   String
   amountCents Int
-  method      PaymentMethod @default(STRIPE)
-  stripeChargeId String?
-  stripeRefundId String? // set when partially/fully refunded
+  method      PaymentMethod @default(PROVIDER)
+  providerPaymentId String?
+  refundId String? // set when partially/fully refunded
   refundedCents Int @default(0)
   createdAt   DateTime @default(now())
 
@@ -170,7 +170,7 @@ model Payment {
 }
 
 enum PaymentMethod {
-  STRIPE
+  PROVIDER
   MANUAL // recorded offline payment by org admin
 }
 
