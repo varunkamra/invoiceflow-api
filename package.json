@@ -1,7 +1,7 @@
 {
   "name": "invoiceflow-api",
   "version": "1.0.0",
-  "description": "Multi-tenant invoicing SaaS API — Fastify, PostgreSQL, Stripe, BullMQ",
+  "description": "Multi-tenant invoicing SaaS API \u2014 Fastify, PostgreSQL, Stripe, BullMQ",
   "type": "module",
   "main": "dist/server.js",
   "scripts": {
@@ -15,7 +15,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint src",
-    "worker": "tsx src/jobs/worker.ts"
+    "worker": "tsx src/jobs/entry.ts"
   },
   "prisma": {
     "schema": "src/db/schema.prisma"

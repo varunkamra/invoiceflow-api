@@ -111,6 +111,9 @@ model Invoice {
   stripePaymentIntentId String?
   stripeHostedUrl String? // checkout / hosted invoice link
 
+  sentAt         DateTime? // when invoice was emailed to the customer
+  lastReminderAt DateTime? // last overdue reminder sent (throttle reminders)
+
   paidAt   DateTime?
   voidedAt DateTime?
 

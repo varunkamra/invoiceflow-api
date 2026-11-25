@@ -11,6 +11,7 @@ import {
 import { paymentProvider } from "../services/payments/index.js";
 import { paymentsConfigured } from "../config/env.js";
 import { prisma } from "../lib/prisma.js";
+import { invoiceQueue } from "../jobs/queues.js";
 
 const itemSchema = z.object({
   description: z.string().min(1).max(500),
@@ -73,6 +74,28 @@ export async function invoiceRoutes(app: FastifyInstance) {
     requireRole(req, "ADMIN");
     const { id } = z.object({ id: z.string().min(1) }).parse(req.params);
     return transitionInvoice(req.auth!.organizationId, id, "VOID");
+  });
+
+  app.post("/:id/send", async (req, reply) => {
+    requireRole(req, "ADMIN");
+    const { id } = z.object({ id: z.string().min(1) }).parse(req.params);
+    const invoice = await getInvoice(req.auth!.organizationId, id);
+    if (invoice.status !== "OPEN") {
+      const err = new Error("only OPEN invoices can be sent") as Error & { statusCode?: number };
+      err.statusCode = 422;
+      throw err;
+    }
+    await invoiceQueue.add(
+      "send-invoice",
+      { invoiceId: invoice.id },
+      {
+        jobId: `send-${invoice.id}`, // idempotent enqueue: re-sending while pending is a no-op
+        removeOnComplete: true,
+        attempts: 3,
+        backoff: { type: "exponential", delay: 30_000 },
+      }
+    );
+    return reply.code(202).send({ queued: true, invoiceId: invoice.id });
   });
 
   app.post("/:id/payment-link", async (req, reply) => {
