@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Start Postgres + Redis
+        run: docker compose up -d postgres redis
+
+      - name: Create test database
+        run: |
+          until docker compose exec -T postgres pg_isready -U invoiceflow; do sleep 1; done
+          docker compose exec -T postgres psql -U invoiceflow -c "CREATE DATABASE invoiceflow_test" || true
+
+      - name: Type-check
+        run: npx tsc --noEmit
+
+      - name: Run tests
+        run: npx vitest run
+        env:
+          DATABASE_URL: postgresql://invoiceflow:invoiceflow@localhost:5433/invoiceflow_test
+          REDIS_URL: redis://localhost:6380
+          JWT_SECRET: ci-secret-ci-secret-ci-secret-ci-secret-0123
+          RAZORPAY_KEY_ID: rzp_test_placeholder
+          RAZORPAY_KEY_SECRET: placeholder
+          RAZORPAY_WEBHOOK_SECRET: test-webhook-secret
