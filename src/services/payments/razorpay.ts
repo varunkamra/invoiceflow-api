@@ -63,12 +63,15 @@ export const razorpayProvider: PaymentProvider = {
 
   verifyAndParseWebhook(rawBody, headers): ParsedWebhookEvent | null {
     const signature = headers["x-razorpay-signature"];
-    if (!signature || !env.RAZORPAY_WEBHOOK_SECRET) {
+    // Read the secret at call time (not import time) so it can rotate without
+    // a process restart — and so tests can inject a test secret.
+    const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
+    if (!signature || !webhookSecret) {
       throw new Error("missing webhook signature");
     }
 
     const expected = crypto
-      .createHmac("sha256", env.RAZORPAY_WEBHOOK_SECRET)
+      .createHmac("sha256", webhookSecret)
       .update(rawBody)
       .digest("hex");
 

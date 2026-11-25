@@ -1,7 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { prisma } from "../lib/prisma.js";
 import { paymentProvider } from "../services/payments/index.js";
-import { notFound } from "../services/customers.js";
 
 /**
  * Payment provider webhook.
@@ -24,9 +23,9 @@ export async function webhookRoutes(app: FastifyInstance) {
         req.headers as unknown as Record<string, string | undefined>
       );
     } catch (err) {
-      // 400 → provider retries; bad signatures should not be retried silently
+      // 401 for bad signatures — never retried silently, and alerts on floods
       req.log.warn({ err }, "webhook signature verification failed");
-      return reply.code(400).send({ error: "invalid signature" });
+      return reply.code(401).send({ error: "invalid signature" });
     }
 
     if (!event) {
@@ -56,7 +55,11 @@ export async function webhookRoutes(app: FastifyInstance) {
           where: { id: event.invoiceId },
           include: { organization: true },
         });
-        if (!invoice) throw notFound(`invoice ${event.invoiceId} not found`);
+        if (!invoice) {
+          // Validly-signed event but the invoice doesn't exist (yet). Return 500
+          // so the provider retries — delivery-ordering issues resolve on retry.
+          throw Object.assign(new Error(`invoice ${event.invoiceId} not found`), { statusCode: 500 });
+        }
 
         if (invoice.status === "OPEN") {
           await prisma.$transaction([

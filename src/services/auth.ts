@@ -25,7 +25,7 @@ export async function registerUser(input: { email: string; password: string; nam
       data: { email: input.email, passwordHash, name: input.name },
     });
     const org = await tx.organization.create({
-      data: { name: input.orgName, slug: slugify(input.orgName) },
+      data: { name: input.orgName, slug: await uniqueSlug(input.orgName) },
     });
     await tx.member.create({
       data: { organizationId: org.id, userId: user.id, role: "OWNER" },
@@ -71,4 +71,20 @@ function slugify(name: string) {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/(^-|-$)/g, "")
     .slice(0, 48);
+}
+
+/**
+ * Slugify the org name, then dedupe against existing orgs: "Acme" → "acme",
+ * second "Acme" → "acme-2" (or "-3", …). Retry loop handles concurrent
+ * registration of the same name; the DB unique constraint is the final backstop.
+ */
+async function uniqueSlug(name: string): Promise<string> {
+  const base = slugify(name) || "org";
+  let n = 1;
+  for (;;) {
+    const slug = n === 1 ? base : `${base}-${n}`;
+    const clash = await prisma.organization.findUnique({ where: { slug } });
+    if (!clash) return slug;
+    n++;
+  }
 }
